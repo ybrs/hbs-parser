@@ -1,20 +1,37 @@
 let a = `
-  {{#if name }}
-  xtrue
-  {{else}}
-    {{#each foo}}
-        <div>{{foobar}}</div>
-    {{/each}}
+    {{#if cond}}
+        <p>cond is true</p>
+    {{/if}}
 
-    {{#each bar}}
-        <div>{{x}}</div>
-    {{/each}}
+    {{#unless cond}}
+        <p>cond is false</p>
+    {{/unless}}
 
-  {{/if}}
+    {{#if name }}
+        xtrue
+    {{else}}
+        {{#each foo}}
+            <div>{{foobar}}</div>
+        {{/each}}
+
+        {{#each bar}}
+            <div>{{x}}</div>
+        {{/each}}
+    {{/if}}
+
+{{#each paragraphs }}
+  
+    {{title}}
+
+  <p>{{title}}</p>
+{{else}}
+  <p class="empty">No content</p>
+{{/each}}
+
+
 `
 
 hbs = require('handlebars')
-
 
 const strPad = (s, level, pad='      ')=>{
     let r = []
@@ -47,8 +64,8 @@ class HBSParser {
                 parseFn(part.program, l)
                 // if conditional had if/else
                 // each has inverse too {{ else }}
-                if (part.inverse){                
-                    this.djangoTemplate.push([l, 'ELSE']); 
+                if (part.inverse){
+                    this.djangoTemplate.push([l, 'ELSE', part.path.parts[0]]); 
                     parseFn(part.inverse, l) 
                 }
 
@@ -66,6 +83,7 @@ class HBSParser {
         return {
             'each': (level, params)=> strPad(`{% for ${contextVar} in ${params} %}`, level) +'\n',
             'if': (level, params)=> strPad(`{% if ${params} %}`, level) +'\n',
+            'unless': (level, params)=> strPad(`{% if not ${params} %}`, level) +'\n',
         }[cmd](level, ...others)
     }
 
@@ -77,7 +95,10 @@ class HBSParser {
                 let contextVar = this.contextVariables[level-1]
                 return `{{ ${contextVar}.${params} }}`
             },
-            'ELSE': (level, params)=>{
+            'ELSE': (level, cmd)=>{
+                if (cmd === 'each'){
+                    return '{% empty %}\n'
+                }
                 return "{% else %}\n"
             }
         }
@@ -126,7 +147,8 @@ class HBSParser {
         console.log("last block", cmd)
         return {
             'if': '{% endif %}',
-            'each': '{% endfor %}'
+            'each': '{% endfor %}',
+            'unless': '{% endif %}'
         }[cmd]
     }
 
