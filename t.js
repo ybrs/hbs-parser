@@ -1,30 +1,16 @@
 let a = `
-<div class="post">
-    {{#each items}}
-      <h1>{{author}}</h1>
-      {{#each others}}
-        <h3>{{otheritem}}</h3>
-      {{/each}}
-
-      {{#each someitems}}
-        <h5>{{someitem}}</h5>
-        <ul>
-        {{#each theothers}}
-            <li>
-                {{theothers_name}}
-            </li>
-        {{/each}}
-        </ul>
-      {{/each}}
-
-
-      {{#if name }}
-        <p>{{name}}</p>
-      {{else}}
-        <p> no name </p>
-      {{/if}}
+  {{#if name }}
+  xtrue
+  {{else}}
+    {{#each foo}}
+        <div>{{foobar}}</div>
     {{/each}}
-</div>
+
+    {{#each bar}}
+        <div>{{x}}</div>
+    {{/each}}
+
+  {{/if}}
 `
 
 hbs = require('handlebars')
@@ -45,6 +31,7 @@ class HBSParser {
         this.parsePart = this.parsePart.bind(this)
         this.djangoTemplate = []
         this.contexts = []
+        this.blocks = []
         this.contextVariables = 'abcxyz'
         this.lastLevel = 0
         this.typeParsers = {
@@ -55,8 +42,16 @@ class HBSParser {
             'BlockStatement': (part, level, parseFn)=>{
                 // {#each }
                 // this.contexts.push(this.contextVariables[level])
+                let l = level + 1;
                 this.djangoTemplate.push([level, part.type, part.path.parts[0], part.params[0].parts]); 
-                parseFn(part.program, ++level); 
+                parseFn(part.program, l)
+                // if conditional had if/else
+                // each has inverse too {{ else }}
+                if (part.inverse){                
+                    this.djangoTemplate.push([l, 'ELSE']); 
+                    parseFn(part.inverse, l) 
+                }
+
             },
             'Program': (part, level, parseFn)=> parseFn(part.body, level),
             'MustacheStatement': (part, level, parseFn)=>{
@@ -67,6 +62,7 @@ class HBSParser {
 
     translateHelpers(level, cmd, ...others){
         let contextVar = this.contextVariables[level]
+        this.blocks.push(cmd)
         return {
             'each': (level, params)=> strPad(`{% for ${contextVar} in ${params} %}`, level) +'\n',
             'if': (level, params)=> strPad(`{% if ${params} %}`, level) +'\n',
@@ -80,9 +76,12 @@ class HBSParser {
             'MustacheStatement': (level, params)=>{
                 let contextVar = this.contextVariables[level-1]
                 return `{{ ${contextVar}.${params} }}`
+            },
+            'ELSE': (level, params)=>{
+                return "{% else %}\n"
             }
         }
-
+        console.log("type", type)
         return statements[type]? statements[type](level, ...others) : ''
     }
 
@@ -123,6 +122,14 @@ class HBSParser {
 
     }
 
+    getClosingTagForBlock(cmd){
+        console.log("last block", cmd)
+        return {
+            'if': '{% endif %}',
+            'each': '{% endfor %}'
+        }[cmd]
+    }
+
     output(){
         let out = []
         console.log("-------")
@@ -133,7 +140,8 @@ class HBSParser {
             let level = line[0]
             if (level < this.lastLevel){
                 // exiting from block
-                out.push(strPad("{% endFor %}", level) + '\n')
+                let lastBlock = this.blocks.pop()
+                out.push(strPad(this.getClosingTagForBlock(lastBlock), level) + '\n')
             }
             this.lastLevel = level
             out.push(this.translateStatement(...line))
