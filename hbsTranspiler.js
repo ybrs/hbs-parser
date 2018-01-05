@@ -49,36 +49,43 @@ class HBSParser {
         this.djangoTemplate = []
         this.contexts = []
         this.blocks = []
-        this.contextVariables = 'abcxyz'
+        // context variables start from 1, hence there is a space in the beginning
+        this.contextVariables = ' abcxyz'
         this.lastLevel = 0
         this.typeParsers = {
-            'ContentStatement': (part, level, parseFn)=>{
-                    this.djangoTemplate.push([level, part.type, part.value]); 
-                    parseFn(part.program, level);
+            'ContentStatement': (part, level, contextLevel, parseFn)=>{
+                    this.djangoTemplate.push([level, contextLevel, part.type, part.value]); 
+                    parseFn(part.program, level, contextLevel);
             },
-            'BlockStatement': (part, level, parseFn)=>{
+            'BlockStatement': (part, level, contextLevel, parseFn)=>{
                 // {#each }
-                // this.contexts.push(this.contextVariables[level])
                 let l = level + 1;
-                this.djangoTemplate.push([level, part.type, part.path.parts[0], part.params[0].parts]); 
-                parseFn(part.program, l)
+                let cLevel = contextLevel;
+                if (part.path.parts[0] === 'if' || part.path.parts[0] === 'unless' ){
+                    // if clause shouldn't increment context level
+                } else {
+                    cLevel = contextLevel+1;
+                    console.log("----> increment ")
+                }
+                this.djangoTemplate.push([level, cLevel, part.type, part.path.parts[0], part.params[0].parts]); 
+                parseFn(part.program, l, cLevel)
                 // if conditional had if/else
                 // each has inverse too {{ else }}
                 if (part.inverse){
                     this.djangoTemplate.push([l, 'ELSE', part.path.parts[0]]); 
-                    parseFn(part.inverse, l) 
+                    parseFn(part.inverse, l, cLevel) 
                 }
 
             },
-            'Program': (part, level, parseFn)=> parseFn(part.body, level),
-            'MustacheStatement': (part, level, parseFn)=>{
-                    this.djangoTemplate.push([level, part.type, part.path.parts[0]]); 
+            'Program': (part, level, contextLevel, parseFn)=> parseFn(part.body, level, contextLevel),
+            'MustacheStatement': (part, level, contextLevel, parseFn)=>{
+                    this.djangoTemplate.push([level, contextLevel, part.type, part.path.parts[0]]); 
             }
         }
     }
 
-    translateHelpers(level, cmd, ...others){
-        let contextVar = this.contextVariables[level]
+    translateHelpers(level, contextLevel, cmd, ...others){
+        let contextVar = this.contextVariables[contextLevel]
         this.blocks.push(cmd)
         return {
             'each': (level, params)=> strPad(`{% for ${contextVar} in ${params} %}`, level) +'\n',
@@ -87,12 +94,15 @@ class HBSParser {
         }[cmd](level, ...others)
     }
 
-    translateStatement(level, type, ...others){
+    translateStatement(level, contextLevel, type, ...others){
         let statements = {
-            'ContentStatement': (level, s)=> s,
-            'BlockStatement': (level, cmd, params)=> this.translateHelpers(level, cmd, ...params),
-            'MustacheStatement': (level, params)=>{
-                let contextVar = this.contextVariables[level-1]
+            'ContentStatement': (level, contextLevel, s)=> s,
+            'BlockStatement': (level, contextLevel, cmd, params)=> this.translateHelpers(level, contextLevel, cmd, ...params),
+            'MustacheStatement': (level, contextLevel, params)=>{
+                let contextVar = this.contextVariables[contextLevel]
+                if (typeof contextVar === 'undefined'){
+                    return `{{ ${params} }}`
+                }
                 return `{{ ${contextVar}.${params} }}`
             },
             'ELSE': (level, cmd)=>{
@@ -103,26 +113,26 @@ class HBSParser {
             }
         }
         console.log("type", type)
-        return statements[type]? statements[type](level, ...others) : ''
+        return statements[type]? statements[type](level, contextLevel, ...others) : ''
     }
 
 
-    parsePart(part, level){
+    parsePart(part, level, contextLevel){
         if (!part){
             return
         }
 
         if (Array.isArray(part)){
             for (const p of part){
-                this.parsePart(p, level)
+                this.parsePart(p, level, contextLevel)
             }
             return
         }
 
-        console.log("- level - ", level)
-        console.log("---------------------------")
-        console.log(part)
-        console.log("//-------------------------")
+        // console.log("- level - ", level)
+        // console.log("---------------------------")
+        // console.log(part)
+        // console.log("//-------------------------")
     
         let fn = this.typeParsers[part.type]
         if (typeof fn === 'undefined'){
@@ -132,14 +142,14 @@ class HBSParser {
             console.log("//-------------------")
             return
         }
-        fn(part, level, this.parsePart)
+        fn(part, level, contextLevel, this.parsePart)
         // this.parsePart(ret)
     }
 
     parseTemplate(s){
         this.template = s
-        this.parsed = hbs.parse(a)
-        this.parsePart(this.parsed.body, 0)
+        this.parsed = hbs.parse(this.template)
+        this.parsePart(this.parsed.body, 0, 0)
 
     }
 
@@ -173,9 +183,11 @@ class HBSParser {
 
 }
 
-let p = new HBSParser()
-p.parseTemplate(a)
-console.log(p.output())
 
 
+// let p = new HBSParser()
+// p.parseTemplate(a)
+// console.log(p.output())
 
+
+module.exports = {HBSParser}
