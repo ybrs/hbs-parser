@@ -74,12 +74,12 @@ let testCases = [
     `, 
     `
 {% if cond %}
-      {% for b in foobar %}
-        {{ b.total }}
+      {% for a in foobar %}
+        {{ a.total }}
       {% endfor %}
 
-      {% for b in others %}
-        {{ b.title }}
+      {% for a in others %}
+        {{ a.title }}
       {% endfor %}
 {% endif %}
     `],
@@ -106,6 +106,38 @@ let testCases = [
         {{ b.title }}
       {% endfor %}
 {% endfor %}
+    `],
+
+    ['nested each-else / if-else loops', 
+    `
+{{#each items}}
+    {{#if cond}}
+        {{total}}
+    {{else}}
+        no cond
+    {{/if}}
+
+    {{#each others}}
+        {{title}}
+    {{else}}
+        x
+    {{/each}}    
+{{/each}}
+    `, 
+    `
+{% for a in items %}
+      {% if cond %}
+        {{ a.total }}
+      {% else %}
+        no cond
+      {% endif %}
+
+      {% for b in others %}
+        {{ b.title }}
+      {% empty %}
+        x
+      {% endfor %}
+{% endfor %}
     `]
 
 ]
@@ -127,5 +159,6 @@ for (const testCase of testCases){
             console.log(out.trim())
             console.log("//---------")
             console.log("FAILED")
+            break;
     }
 }

@@ -65,14 +65,14 @@ class HBSParser {
                     // if clause shouldn't increment context level
                 } else {
                     cLevel = contextLevel+1;
-                    console.log("----> increment ")
                 }
+
                 this.djangoTemplate.push([level, cLevel, part.type, part.path.parts[0], part.params[0].parts]); 
                 parseFn(part.program, l, cLevel)
                 // if conditional had if/else
                 // each has inverse too {{ else }}
                 if (part.inverse){
-                    this.djangoTemplate.push([l, 'ELSE', part.path.parts[0]]); 
+                    this.djangoTemplate.push([l, cLevel, 'ELSE', part.path.parts[0]]); 
                     parseFn(part.inverse, l, cLevel) 
                 }
 
@@ -105,14 +105,13 @@ class HBSParser {
                 }
                 return `{{ ${contextVar}.${params} }}`
             },
-            'ELSE': (level, cmd)=>{
+            'ELSE': (level, contextLevel, cmd)=>{
                 if (cmd === 'each'){
-                    return '{% empty %}\n'
+                    return strPad('{% empty %}\n', level-1)
                 }
-                return "{% else %}\n"
+                return strPad("{% else %}\n", level-1)
             }
         }
-        console.log("type", type)
         return statements[type]? statements[type](level, contextLevel, ...others) : ''
     }
 
@@ -154,7 +153,6 @@ class HBSParser {
     }
 
     getClosingTagForBlock(cmd){
-        console.log("last block", cmd)
         return {
             'if': '{% endif %}',
             'each': '{% endfor %}',
@@ -164,9 +162,6 @@ class HBSParser {
 
     output(){
         let out = []
-        console.log("-------")
-        console.log(this.contexts)
-        console.log("//-----")
         for (const line of this.djangoTemplate){
            console.log("| ", line)
             let level = line[0]
